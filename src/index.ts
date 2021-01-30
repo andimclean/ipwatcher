@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { Observable, Subscriber } from 'rxjs';
-import { StringDecoder } from 'string_decoder';
+import readline from 'readline';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -64,36 +64,35 @@ function makeSizes(groups: string[]): Sizes {
 function startIftop() {
   return new Observable((subscriber: Subscriber<MyType>) => {
     const iftop = spawn(COMMAND, ARGS);
-    const decoder = new StringDecoder('utf8');
-    iftop.stdout.on('data', (buffer) => {
-      const data: string[] = decoder.write(buffer).split('\n');
-
-      let json: Partial<MyType> = {};
-      data.forEach((line: string) => {
-        const groups = regEx.exec(line);
-
-        if (groups && groups.length == 8) {
-          switch (groups[directionGroup]) {
-            case '=>':
-              json = {
-                outIP: groups[ipGroup],
-                outPort: Number(groups[portGroup]),
-                outSize: makeSizes(groups),
-              };
-              break;
-            case '<=':
-              json.inIp = groups[ipGroup];
-              json.inPort = Number(groups[portGroup]);
-              json.inSize = makeSizes(groups);
-              subscriber.next(<MyType>json);
-              json = {};
-              break;
-            default:
-              console.warn('Unknown direction ' + groups[directionGroup], line);
-          }
-        }
-      });
+    const rl = readline.createInterface({
+      input: iftop.stdout,
     });
+    let json: Partial<MyType> = {};
+    rl.on('line', (line: string) => {
+      const groups = regEx.exec(line);
+
+      if (groups && groups.length == 8) {
+        switch (groups[directionGroup]) {
+          case '=>':
+            json = {
+              outIP: groups[ipGroup],
+              outPort: Number(groups[portGroup]),
+              outSize: makeSizes(groups),
+            };
+            break;
+          case '<=':
+            json.inIp = groups[ipGroup];
+            json.inPort = Number(groups[portGroup]);
+            json.inSize = makeSizes(groups);
+            subscriber.next(<MyType>json);
+            json = {};
+            break;
+          default:
+            console.warn('Unknown direction ' + groups[directionGroup], line);
+        }
+      }
+    });
+
     iftop.stderr.on('data', (data) => {
       console.log('****', data.toString());
     });
