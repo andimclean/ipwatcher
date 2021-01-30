@@ -2,12 +2,40 @@ import { spawn } from 'child_process';
 import { Observable, Subscriber } from 'rxjs';
 import readline from 'readline';
 import dotenv from 'dotenv';
+import amqp from 'amqplib/callback_api';
 
 dotenv.config();
 
 const COMMAND = 'iftop';
 
 const ARGS = [process.env.ARGS || '-pBtnNPlL 300'];
+const rabbitMqHost = process.env.RabbitMQHost || 'localhost';
+const channelName = process.env.ipAddressChannelName || 'ipaddress';
+
+amqp.connect('amqp://' + rabbitMqHost, (error, connection) => {
+  if (error) {
+    throw error;
+  }
+  connection.createChannel((error1, channel) => {
+    if (error1) {
+      throw error1;
+    }
+
+    const queue = channelName;
+    channel.assertQueue(queue, {
+      durable: false,
+    });
+    startIftop().subscribe(
+      (data) => {
+        const tosend = JSON.stringify(data);
+        channel.sendToQueue(queue, Buffer.from(tosend));
+        console.log(tosend);
+      },
+      () => {},
+      () => {}
+    );
+  });
+});
 
 interface Sizes {
   last2Seconds: number;
@@ -25,13 +53,16 @@ interface MyType {
   outSize: Sizes;
 }
 
-const multipliers: { [key: string]: number } = {
-  B: 1,
-  K: 1024,
-  M: 1024 * 1024,
-  G: 1024 * 1024 * 1024,
-  T: 1024 * 1024 * 1024 * 1024,
-};
+const multipliersString = process.env.multipliers;
+const multipliers: { [key: string]: number } = multipliersString
+  ? JSON.parse(multipliersString)
+  : {
+      B: 1,
+      K: 1024,
+      M: 1024 * 1024,
+      G: 1024 * 1024 * 1024,
+      T: 1024 * 1024 * 1024 * 1024,
+    };
 
 const regEx = new RegExp(/(\d+\.\d+\.\d+\.\d+):(\d+)\s+([<=>]+)\s+(\d+[BKMG])\s+(\d+[BKMG])\s+(\d+[BKMG])\s+(\d+[BKMG])$/);
 const numGroups = 8;
@@ -71,7 +102,7 @@ function startIftop() {
     rl.on('line', (line: string) => {
       const groups = regEx.exec(line);
 
-      if (groups && groups.length == 8) {
+      if (groups && groups.length == numGroups) {
         switch (groups[directionGroup]) {
           case '=>':
             json = {
@@ -102,10 +133,3 @@ function startIftop() {
     });
   });
 }
-startIftop().subscribe(
-  (data) => {
-    console.log(data);
-  },
-  () => {},
-  () => {}
-);
