@@ -1,9 +1,13 @@
 import { spawn } from 'child_process';
 import { Observable, Subscriber } from 'rxjs';
 import { StringDecoder } from 'string_decoder';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const COMMAND = 'iftop';
-const ARGS = ['-pBtnNPlL', '300'];
+
+const ARGS = [process.env.ARGS || '-pBtnNPlL 300'];
 
 interface Sizes {
   last2Seconds: number;
